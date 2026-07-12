@@ -13,7 +13,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
+import org.springframework.web.cors.CorsConfiguration;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -25,14 +26,24 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            // Desactivar CSRF y configurar CORS básico para evitar bloqueos externos
             .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(request -> {
+                CorsConfiguration config = new CorsConfiguration();
+                config.setAllowedOrigins(List.of("*"));
+                config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                config.setAllowedHeaders(List.of("*"));
+                return config;
+            }))
 
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
             .authorizeHttpRequests(auth -> auth
+                // 1. CUALQUIER método hacia auth (POST login/register) es totalmente libre
                 .requestMatchers("/api/v1/auth/**").permitAll()
 
+                // 2. Swagger y documentación libre
                 .requestMatchers(
                     "/swagger-ui/**",
                     "/swagger-ui.html",
@@ -40,13 +51,13 @@ public class SecurityConfig {
                     "/v3/api-docs/**"
                 ).permitAll()
 
-                
+                // 3. Rutas de negocio (Excluimos explícitamente auth usando reglas ordenadas)
+                .requestMatchers(HttpMethod.GET, "/api/v1/videojuegos/**", "/api/v1/resenas/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/videojuegos/**", "/api/v1/resenas/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/videojuegos/**", "/api/v1/resenas/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/videojuegos/**", "/api/v1/resenas/**").hasRole("ADMIN")
 
-                .requestMatchers(HttpMethod.GET, "/api/v1/**").hasAnyRole("USER", "ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/v1/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/**").hasRole("ADMIN")
-
+                // Cualquier otra petición requiere autenticación
                 .anyRequest().authenticated()
             )
 
